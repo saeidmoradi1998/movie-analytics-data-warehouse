@@ -21,6 +21,30 @@ Workflow:
 
 ---
 
+
+---
+
+## ⭐ Star Schema
+
+![Star Schema Diagram](docs/star_schema.png)
+
+### Fact Table
+- `fact_movie_performance`
+  - fact_id (PK)
+  - movie_id (FK)
+  - date_id (FK)
+  - rating
+  - vote_count
+
+### Dimension Tables
+- `dim_movie`
+- `dim_date`
+- `dim_genre`
+
+The schema is designed to be extensible for future dimensions such as country, language, and revenue.
+
+
+
 ## 📊 Sample Analytical Queries & Results
 
 ---
