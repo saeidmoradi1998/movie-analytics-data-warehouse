@@ -3,6 +3,8 @@ import psycopg2
 import pandas as pd
 from pathlib import Path
 from dotenv import load_dotenv
+from psycopg2.extras import execute_values
+
 
 # Load environment variables
 load_dotenv()
@@ -83,6 +85,9 @@ def load_dim_genre():
 
     # حذف NULL
     df = df.dropna()
+    
+    # حذف مقدار \N که null منطقیه
+    df = df[df["genres"] != "\\N"]
 
     # unique genres
     df = df.drop_duplicates()
@@ -109,27 +114,28 @@ def load_dim_genre():
 def load_dim_date():
     df = pd.read_csv(DATA_PATH)
 
-    # فقط سال‌ها
     years = pd.to_numeric(df["release_year"], errors="coerce")
-    years = years.dropna().astype(int)
-    years = years.unique()
+    years = years.dropna().astype(int).unique()
 
     conn = get_connection()
     cur = conn.cursor()
 
-    for y in years:
-        year = int(y)  # 🔑 numpy.int64 -> int
-        date_id = int(f"{year}0101")
-        decade = int((year // 10) * 10)
+    records = []
 
-        cur.execute(
-            """
-            INSERT INTO dim_date (date_id, year, month, day, decade)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-            """,
-            (date_id, year, 1, 1, decade)
-        )
+    for y in years:
+        year = int(y)
+        date_id = year          # 👈 مهم: فقط سال
+        decade = (year // 10) * 10
+
+        records.append((date_id, year, 1, 1, decade))
+
+    insert_query = """
+        INSERT INTO dim_date (date_id, year, month, day, decade)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+    """
+
+    execute_values(cur, insert_query, records)
 
     conn.commit()
     cur.close()
@@ -137,56 +143,113 @@ def load_dim_date():
 
     print("✅ dim_date loaded successfully")
 
+
+
+def load_bridge_movie_genre():
+    df = pd.read_csv(DATA_PATH)
+
+    # ⏩ محدودسازی برای تست
+    df = df.head(5000)
+
+    df = df[["imdb_id", "genres"]]
+    df = df.dropna()
+
+    # حذف \N
+    df = df[df["genres"] != "\\N"]
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # 🔥 Load movie_ids into dictionary
+    cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
+    movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
+
+    # 🔥 Load genre_ids into dictionary
+    cur.execute("SELECT genre_id, genre_name FROM dim_genre")
+    genre_map = {genre_name: genre_id for genre_id, genre_name in cur.fetchall()}
+
+    records = []
+
+    for _, row in df.iterrows():
+        movie_id = movie_map.get(row["imdb_id"])
+
+        if not movie_id:
+            continue
+
+        genres = row["genres"].split(",")
+
+        for g in genres:
+            g = g.strip()   
+            genre_id = genre_map.get(g)
+
+            if genre_id:
+                records.append((movie_id, genre_id))
+
+    insert_query = """
+        INSERT INTO bridge_movie_genre (movie_id, genre_id)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+    """
+
+    if records:   # جلوگیری از execute روی لیست خالی
+        execute_values(cur, insert_query, records)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    print("✅ bridge_movie_genre loaded successfully")
+
+
+
+
+
 def load_fact_movie_performance():
     df = pd.read_csv(DATA_PATH)
 
-    # ستون‌های لازم
     df = df[["imdb_id", "release_year", "rating", "vote_count"]]
 
-    # تبدیل به numeric
     df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
     df["vote_count"] = pd.to_numeric(df["vote_count"], errors="coerce")
     df["release_year"] = pd.to_numeric(df["release_year"], errors="coerce")
 
-    # حذف ردیف‌های ناقص
     df = df.dropna(subset=["imdb_id", "rating", "vote_count", "release_year"])
-    
-    # ⏩ محدودسازی برای سرعت (مهم)
+
+    # ⏩ محدودسازی برای تست
     df = df.head(3000)
 
     conn = get_connection()
     cur = conn.cursor()
 
+    # 🔥 فقط یک بار movie_id ها رو بگیر
+    cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
+    movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
+
+    records = []
+
     for _, row in df.iterrows():
-        year = int(row["release_year"])
-        date_id = int(f"{year}0101")
-
-        # گرفتن movie_id
-        cur.execute(
-            "SELECT movie_id FROM dim_movie WHERE imdb_id = %s",
-            (row["imdb_id"],)
-        )
-        result = cur.fetchone()
-
-        if not result:
+        movie_id = movie_map.get(row["imdb_id"])
+        if not movie_id:
             continue
 
-        movie_id = result[0]
+        year = int(row["release_year"])
+        date_id = year
 
-        cur.execute(
-            """
-            INSERT INTO fact_movie_performance
-                (movie_id, date_id, rating, vote_count)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-            """,
-            (
-                movie_id,
-                date_id,
-                float(row["rating"]),
-                int(row["vote_count"])
-            )
-        )
+        records.append((
+            movie_id,
+            date_id,
+            float(row["rating"]),
+            int(row["vote_count"])
+        ))
+
+    insert_query = """
+        INSERT INTO fact_movie_performance
+        (movie_id, date_id, rating, vote_count)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+    """
+
+    execute_values(cur, insert_query, records)
 
     conn.commit()
     cur.close()
@@ -195,8 +258,10 @@ def load_fact_movie_performance():
     print("✅ fact_movie_performance loaded successfully")
 
 
+
 if __name__ == "__main__":
-    # load_dim_movie()
-    # load_dim_genre()
-    # load_dim_date()
+    load_dim_movie()
+    load_dim_genre()
+    load_dim_date()
+    load_bridge_movie_genre()
     load_fact_movie_performance()
