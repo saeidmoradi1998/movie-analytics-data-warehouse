@@ -211,11 +211,3 @@ After loading the data into PostgreSQL, several validation checks were performed
 These checks ensure data integrity and correctness of the warehouse design.
 
 ---
-
-
-## 🚀 Planned Improvements
-
-- Indexing strategy  
-- Full dataset performance optimization  
-- Dashboard integration  
-- Query benchmarking  
