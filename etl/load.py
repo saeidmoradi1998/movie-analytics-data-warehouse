@@ -99,16 +99,15 @@ def load_dim_genre():
     
     df = pd.read_csv(DATA_PATH)
 
-    # فقط ستون genre
+
     df = df[["genres"]]
 
-    # حذف NULL
     df = df.dropna()
     
-    # حذف مقدار \N که null منطقیه
+
     df = df[df["genres"] != "\\N"]
 
-    # unique genres
+
     df = df.drop_duplicates()
     logger.info(f"Unique genres to insert: {len(df)}")
 
@@ -149,7 +148,7 @@ def load_dim_date():
 
     for y in years:
         year = int(y)
-        date_id = year          # 👈 مهم: فقط سال
+        date_id = year          
         decade = (year // 10) * 10
 
         records.append((date_id, year, 1, 1, decade))
@@ -177,14 +176,14 @@ def load_bridge_movie_genre():
     
     df = pd.read_csv(DATA_PATH)
 
-    # ⏩ محدودسازی برای تست
+
     df = df.head(5000)
 
     df = df[["imdb_id", "genres"]]
     df = df.dropna()
     logger.info(f"Rows prepared for bridge table: {len(df)}")
 
-    # حذف \N
+
     df = df[df["genres"] != "\\N"]
 
     conn = get_connection()
@@ -223,7 +222,7 @@ def load_bridge_movie_genre():
         ON CONFLICT DO NOTHING
     """
 
-    if records:   # جلوگیری از execute روی لیست خالی
+    if records:   
         execute_values(cur, insert_query, records)
 
     conn.commit()
@@ -253,13 +252,13 @@ def load_fact_movie_performance():
     
     logger.info(f"Fact rows after cleaning: {len(df)}")
 
-    # ⏩ محدودسازی برای تست
+
     df = df.head(3000)
 
     conn = get_connection()
     cur = conn.cursor()
 
-    # 🔥 فقط یک بار movie_id ها رو بگیر
+
     cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
     movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
 

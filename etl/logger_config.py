@@ -5,14 +5,13 @@ def setup_logger():
 
     log_directory = "logs"
 
-    # اگر پوشه logs وجود نداشت، بسازش
+
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
 
     logger = logging.getLogger("ETL_Logger")
     logger.setLevel(logging.INFO)
 
-    # جلوگیری از duplicate handler
     if not logger.handlers:
 
         file_handler = logging.FileHandler(f"{log_directory}/etl.log")
