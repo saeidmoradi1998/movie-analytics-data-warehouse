@@ -80,7 +80,10 @@ def load_dim_movie():
             """
             INSERT INTO dim_movie (imdb_id, title, release_year)
             VALUES (%s, %s, %s)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (imdb_id)
+            DO UPDATE SET
+            title = EXCLUDED.title,
+            release_year = EXCLUDED.release_year
             """,
             (row["imdb_id"], row["title"], year)
         )
@@ -249,6 +252,7 @@ def load_fact_movie_performance():
     df["release_year"] = pd.to_numeric(df["release_year"], errors="coerce")
 
     df = df.dropna(subset=["imdb_id", "rating", "vote_count", "release_year"])
+    df = df.drop_duplicates(subset=["imdb_id", "release_year"])
     
     logger.info(f"Fact rows after cleaning: {len(df)}")
 
@@ -285,10 +289,13 @@ def load_fact_movie_performance():
         INSERT INTO fact_movie_performance
         (movie_id, date_id, rating, vote_count)
         VALUES %s
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (movie_id, date_id)
+        DO UPDATE SET
+            rating = EXCLUDED.rating,
+            vote_count = EXCLUDED.vote_count
     """
-
-    execute_values(cur, insert_query, records)
+    if records:
+        execute_values(cur, insert_query, records)
 
     conn.commit()
     logger.info("fact_movie_performance committed to database.")
