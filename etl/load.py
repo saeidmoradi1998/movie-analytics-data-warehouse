@@ -1,9 +1,14 @@
 import os
 import psycopg2
 import pandas as pd
+from logger_config import setup_logger
+
+logger = setup_logger()
+
 from pathlib import Path
 from dotenv import load_dotenv
 from psycopg2.extras import execute_values
+
 
 
 # Load environment variables
@@ -24,10 +29,19 @@ DATA_PATH = Path("data/processed/imdb_cleaned.csv")
 
 def get_connection():
     """Create and return a PostgreSQL connection."""
-    return psycopg2.connect(**DB_CONFIG)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        logger.info("Database connection established.")
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        raise
 
 
 def load_dim_movie():
+    
+    logger.info("Starting load for dim_movie...")
+    
     # Read cleaned IMDB data
     df = pd.read_csv(DATA_PATH)
 
@@ -36,6 +50,7 @@ def load_dim_movie():
 
     # Remove duplicate movies
     df = df.drop_duplicates(subset=["imdb_id"])
+    logger.info(f"Unique movies to insert: {len(df)}")
 
     # ⏩ LIMIT rows for faster loading (TEMPORARY)
     df = df.head(5000)
@@ -49,7 +64,7 @@ def load_dim_movie():
         "release_year"
     ] = pd.NA
 
-    conn = get_connection()
+    conn = get_connection()    
     cur = conn.cursor()
 
     for _, row in df.iterrows():
@@ -71,13 +86,17 @@ def load_dim_movie():
         )
 
     conn.commit()
+    logger.info("dim_movie committed to database.")
     cur.close()
     conn.close()
-
-    print("✅ dim_movie loaded successfully (5000 rows)")
+    
+    logger.info("dim_movie load completed successfully.")
 
 
 def load_dim_genre():
+    
+    logger.info("Starting load for dim_genre...")
+    
     df = pd.read_csv(DATA_PATH)
 
     # فقط ستون genre
@@ -91,6 +110,7 @@ def load_dim_genre():
 
     # unique genres
     df = df.drop_duplicates()
+    logger.info(f"Unique genres to insert: {len(df)}")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -106,16 +126,21 @@ def load_dim_genre():
         )
 
     conn.commit()
+    logger.info("dim_genre committed to database.")
     cur.close()
     conn.close()
 
-    print("✅ dim_genre loaded successfully")
+    logger.info("dim_genre load completed successfully.")
 
 def load_dim_date():
+    
+    logger.info("Starting load for dim_date...")
+    
     df = pd.read_csv(DATA_PATH)
 
     years = pd.to_numeric(df["release_year"], errors="coerce")
     years = years.dropna().astype(int).unique()
+    logger.info(f"Unique years found for dim_date: {len(years)}")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -138,14 +163,18 @@ def load_dim_date():
     execute_values(cur, insert_query, records)
 
     conn.commit()
+    logger.info("dim_date committed to database.")
     cur.close()
     conn.close()
 
-    print("✅ dim_date loaded successfully")
+    logger.info("dim_date load completed successfully")
 
 
 
 def load_bridge_movie_genre():
+    
+    logger.info("Starting load for bridge_movie_genre...")
+    
     df = pd.read_csv(DATA_PATH)
 
     # ⏩ محدودسازی برای تست
@@ -153,6 +182,7 @@ def load_bridge_movie_genre():
 
     df = df[["imdb_id", "genres"]]
     df = df.dropna()
+    logger.info(f"Rows prepared for bridge table: {len(df)}")
 
     # حذف \N
     df = df[df["genres"] != "\\N"]
@@ -185,6 +215,8 @@ def load_bridge_movie_genre():
             if genre_id:
                 records.append((movie_id, genre_id))
 
+    logger.info(f"Total bridge records prepared: {len(records)}")
+
     insert_query = """
         INSERT INTO bridge_movie_genre (movie_id, genre_id)
         VALUES %s
@@ -195,16 +227,20 @@ def load_bridge_movie_genre():
         execute_values(cur, insert_query, records)
 
     conn.commit()
+    logger.info("bridge_movie_genre committed to database.")
     cur.close()
     conn.close()
 
-    print("✅ bridge_movie_genre loaded successfully")
+    logger.info("bridge_movie_genre load completed successfully")
 
 
 
 
 
 def load_fact_movie_performance():
+    
+    logger.info("Starting load for fact_movie_performance...")
+    
     df = pd.read_csv(DATA_PATH)
 
     df = df[["imdb_id", "release_year", "rating", "vote_count"]]
@@ -214,6 +250,8 @@ def load_fact_movie_performance():
     df["release_year"] = pd.to_numeric(df["release_year"], errors="coerce")
 
     df = df.dropna(subset=["imdb_id", "rating", "vote_count", "release_year"])
+    
+    logger.info(f"Fact rows after cleaning: {len(df)}")
 
     # ⏩ محدودسازی برای تست
     df = df.head(3000)
@@ -241,6 +279,8 @@ def load_fact_movie_performance():
             float(row["rating"]),
             int(row["vote_count"])
         ))
+    
+    logger.info(f"Total fact records prepared: {len(records)}")
 
     insert_query = """
         INSERT INTO fact_movie_performance
@@ -252,16 +292,19 @@ def load_fact_movie_performance():
     execute_values(cur, insert_query, records)
 
     conn.commit()
+    logger.info("fact_movie_performance committed to database.")
     cur.close()
     conn.close()
 
-    print("✅ fact_movie_performance loaded successfully")
+    logger.info("fact_movie_performance load completed successfully")
 
 
 
 if __name__ == "__main__":
+    logger.info("Starting full ETL load process...")
     load_dim_movie()
     load_dim_genre()
     load_dim_date()
     load_bridge_movie_genre()
     load_fact_movie_performance()
+    logger.info("Full ETL load process completed successfully.")

@@ -1,15 +1,20 @@
 import pandas as pd
 from pathlib import Path
+from logger_config import setup_logger
+
+logger = setup_logger()
 
 
 RAW_IMDB_PATH = Path("data/raw/imdb")
 
 
 def extract_imdb_basics():
+    logger.info("Starting extraction for IMDB basics...")
     input_file = RAW_IMDB_PATH / "title.basics.tsv"
     output_file = RAW_IMDB_PATH / "imdb_movies.csv"
 
     df = pd.read_csv(input_file, sep="\t", low_memory=False)
+    logger.info(f"Extracted {len(df)} rows from title.basics.tsv")
 
     df = df[[
         "tconst",
@@ -26,14 +31,16 @@ def extract_imdb_basics():
     ]
 
     df.to_csv(output_file, index=False)
-    print(f"Saved IMDB basics to {output_file}")
+    logger.info(f"Saved IMDB basics to {output_file}")
 
 
 def extract_imdb_ratings():
+    logger.info("Starting extraction for IMDB ratings...")
     input_file = RAW_IMDB_PATH / "title.ratings.tsv"
     output_file = RAW_IMDB_PATH / "imdb_ratings.csv"
 
     df = pd.read_csv(input_file, sep="\t", low_memory=False)
+    logger.info(f"Extracted {len(df)} rows from title.ratings.tsv")
 
     df = df[[
         "tconst",
@@ -48,8 +55,7 @@ def extract_imdb_ratings():
     ]
 
     df.to_csv(output_file, index=False)
-    print(f"Saved IMDB ratings to {output_file}")
-
+    logger.info(f"Saved IMDB ratings to {output_file}")
 
 def extract_tmdb_data():
     # Will be implemented in the next step
@@ -57,8 +63,12 @@ def extract_tmdb_data():
 
 
 def main():
+    logger.info("Starting full extraction process...")
+
     extract_imdb_basics()
     extract_imdb_ratings()
+
+    logger.info("Extraction process completed successfully.")
 
 
 if __name__ == "__main__":
