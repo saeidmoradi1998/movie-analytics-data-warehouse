@@ -2,6 +2,7 @@ import os
 import psycopg2
 import pandas as pd
 from logger_config import setup_logger
+from psycopg2.extras import execute_values
 
 logger = setup_logger()
 
@@ -64,35 +65,40 @@ def load_dim_movie():
         "release_year"
     ] = pd.NA
 
-    conn = get_connection()    
+    conn = get_connection()
     cur = conn.cursor()
+
+    # Prepare records for bulk insert
+    records = []
 
     for _, row in df.iterrows():
         year = row["release_year"]
+        year = None if pd.isna(year) else int(year)
 
-        # Convert pandas / numpy values to Python-native types
-        if pd.isna(year):
-            year = None
-        else:
-            year = int(year)
+        records.append((
+            row["imdb_id"],
+            row["title"],
+            year
+        ))
 
-        cur.execute(
-            """
-            INSERT INTO dim_movie (imdb_id, title, release_year)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (imdb_id)
-            DO UPDATE SET
+    insert_query = """
+        INSERT INTO dim_movie (imdb_id, title, release_year)
+        VALUES %s
+        ON CONFLICT (imdb_id)
+        DO UPDATE SET
             title = EXCLUDED.title,
             release_year = EXCLUDED.release_year
-            """,
-            (row["imdb_id"], row["title"], year)
-        )
+    """
+
+    if records:
+        execute_values(cur, insert_query, records)
 
     conn.commit()
     logger.info("dim_movie committed to database.")
+    
     cur.close()
     conn.close()
-    
+
     logger.info("dim_movie load completed successfully.")
 
 
@@ -102,33 +108,32 @@ def load_dim_genre():
     
     df = pd.read_csv(DATA_PATH)
 
-
     df = df[["genres"]]
 
     df = df.dropna()
-    
-
     df = df[df["genres"] != "\\N"]
-
-
     df = df.drop_duplicates()
+
     logger.info(f"Unique genres to insert: {len(df)}")
 
     conn = get_connection()
     cur = conn.cursor()
 
-    for _, row in df.iterrows():
-        cur.execute(
-            """
-            INSERT INTO dim_genre (genre_name)
-            VALUES (%s)
-            ON CONFLICT DO NOTHING
-            """,
-            (row["genres"],)
-        )
+    # Prepare records for bulk insert
+    records = [(row["genres"],) for _, row in df.iterrows()]
+
+    insert_query = """
+        INSERT INTO dim_genre (genre_name)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+    """
+
+    if records:
+        execute_values(cur, insert_query, records)
 
     conn.commit()
     logger.info("dim_genre committed to database.")
+
     cur.close()
     conn.close()
 
@@ -234,8 +239,6 @@ def load_bridge_movie_genre():
     conn.close()
 
     logger.info("bridge_movie_genre load completed successfully")
-
-
 
 
 
