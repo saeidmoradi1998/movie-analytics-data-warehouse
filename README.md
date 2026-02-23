@@ -1,129 +1,176 @@
+
 # 🎬 Movie Analytics Data Warehouse
 
-A professional end-to-end Data Engineering project implementing a **Star Schema Data Warehouse** using IMDB datasets and Python ETL.
+An end-to-end **Data Engineering project** that builds a Movie Analytics Data Warehouse using a **Star Schema design**, powered by **Python ETL and PostgreSQL**.
+
+This project demonstrates practical data warehousing concepts including dimensional modeling, ETL pipelines, bulk data loading, and analytical SQL queries.
 
 ---
 
 ## 🚀 Project Overview
 
-This project demonstrates how to design and build a scalable Movie Analytics Data Warehouse using:
+This project simulates a production-style data warehouse built from cleaned IMDB movie datasets.
 
-- Python (Pandas, psycopg2)
-- PostgreSQL
-- SQL
-- Star Schema Modeling
-- Git
+Pipeline steps:
 
-### Workflow
+1. Extract raw movie data  
+2. Transform and clean using Pandas  
+3. Design and implement a Star Schema  
+4. Load structured data into PostgreSQL  
+5. Run analytical SQL queries  
 
-1. Extract cleaned IMDB CSV data  
-2. Transform data using Pandas  
-3. Load data into PostgreSQL using bulk insert  
-4. Run analytical SQL queries  
+The goal is to demonstrate real-world skills in:
+
+- Data Modeling  
+- ETL Development  
+- SQL Analytics  
+- PostgreSQL  
+- Structured Project Architecture  
 
 ---
 
+## 🏗️ Architecture Overview
+
+### 🔁 Data Flow Diagram
+
+```mermaid
+flowchart LR
+    A[Raw IMDB Data] --> B[Extract Layer]
+    B --> C[Transform Layer - Pandas]
+    C --> D[Star Schema Modeling]
+    D --> E[PostgreSQL Data Warehouse]
+    E --> F[Analytical SQL Queries]
+```
+
+---
+
+## 🧱 Star Schema Design
+
+```mermaid
+erDiagram
+
+    fact_movie_performance {
+        int movie_id
+        int date_id
+        float rating
+        int vote_count
+    }
+
+    dim_movie {
+        int movie_id
+        string title
+        int runtime
+    }
+
+    dim_date {
+        int date_id
+        int year
+        int month
+        int decade
+    }
+
+    dim_genre {
+        int genre_id
+        string genre_name
+    }
+
+    bridge_movie_genre {
+        int movie_id
+        int genre_id
+    }
+
+    fact_movie_performance ||--|| dim_movie : relates_to
+    fact_movie_performance ||--|| dim_date : relates_to
+    dim_movie ||--o{ bridge_movie_genre : mapped_by
+    dim_genre ||--o{ bridge_movie_genre : mapped_by
+```
+
+---
 
 ## 📁 Project Structure
+
 ```
 movie-analytics-data-warehouse/
 │
 ├── data/
-│ ├── raw/
-│ └── processed/
+│   ├── raw/
+│   └── processed/
 │
 ├── etl/
-│ ├── extract.py
-│ ├── transform.py
-│ └── load.py
+│   ├── extract.py
+│   ├── transform.py
+│   └── load.py
 │
 ├── sql/
-│ ├── schema.sql
-│ └── example_queries.sql
+│   ├── schema.sql
+│   └── example_queries.sql
 │
 ├── assets/
-├── docs/
 ├── notebooks/
 │
-├── README.md
-└── requirements.txt
+├── requirements.txt
+└── README.md
 ```
----
-
-## 🏗️ Data Model – Star Schema
-
-The warehouse follows a **Star Schema** design:
-
-- `fact_movie_performance` → central fact table  
-- `dim_movie` → movie attributes  
-- `dim_date` → time dimension  
-- `dim_genre` → genre dimension  
-- `bridge_movie_genre` → handles many-to-many relationships  
-
-### Why a Bridge Table?
-
-Movies can belong to multiple genres.  
-To correctly model this many-to-many relationship, a bridge table was implemented.
 
 ---
 
-## 🧠 Design Decisions
+## ⚙️ Installation & Setup
 
-- Star Schema chosen for analytical performance
-- Bridge table implemented for multi-genre movies
-- Foreign key constraints enforced for data integrity
-- Bulk inserts used for ETL performance optimization
-- Incremental loading tested before full dataset scaling
+### 1️⃣ Clone Repository
 
----
+```bash
+git clone https://github.com/saeidmoradi1998/movie-analytics-data-warehouse.git
+cd movie-analytics-data-warehouse
+```
 
+### 2️⃣ Install Dependencies
 
-## 🗂️ Schema Structure
+```bash
+pip install -r requirements.txt
+```
 
-### dim_movie
-- movie_id (PK)
-- imdb_id
-- title
-- release_year
-- runtime
+### 3️⃣ Setup PostgreSQL
 
-### dim_date
-- date_id (PK)
-- year
-- month
-- day
-- decade
+```bash
+createdb movie_dw
+psql movie_dw -f sql/schema.sql
+```
 
-### dim_genre
-- genre_id (PK)
-- genre_name
+### 4️⃣ Run ETL
 
-### bridge_movie_genre
-- movie_id (FK)
-- genre_id (FK)
-
-### fact_movie_performance
-- movie_id (FK)
-- date_id (FK)
-- rating
-- vote_count
+```bash
+python etl/load.py
+```
 
 ---
 
-## 📊 Sample Analytical Queries
+## 📊 Example Analytical Queries
 
-### Average Rating by Year
+### 🔝 Top Movies by Rating (Min 100 Votes)
 
 ```sql
-SELECT d.year,
+SELECT m.title,
+       f.rating,
+       f.vote_count
+FROM fact_movie_performance f
+JOIN dim_movie m ON f.movie_id = m.movie_id
+WHERE f.vote_count >= 100
+ORDER BY f.rating DESC
+LIMIT 10;
+```
+
+### 📈 Average Rating by Decade
+
+```sql
+SELECT d.decade,
        ROUND(AVG(f.rating),2) AS avg_rating
 FROM fact_movie_performance f
 JOIN dim_date d ON f.date_id = d.date_id
-GROUP BY d.year
-ORDER BY d.year;
+GROUP BY d.decade
+ORDER BY d.decade;
 ```
 
-### Top Genres by Average Rating
+### 🎭 Top Genres by Average Rating
 
 ```sql
 SELECT g.genre_name,
@@ -134,80 +181,44 @@ JOIN dim_genre g ON b.genre_id = g.genre_id
 GROUP BY g.genre_name
 ORDER BY avg_rating DESC;
 ```
----
-
-## ⚡ Query Performance Testing
-
-Example:
-
-```sql
-EXPLAIN ANALYZE
-SELECT *
-FROM fact_movie_performance
-WHERE rating > 8;
-```
-
 
 ---
 
-## ⚙️ ETL Highlights
+## 🔍 Engineering Highlights
 
-- Data cleaning with Pandas  
-- Null handling & numeric conversion  
-- Multi-genre support (split & mapping)  
-- Bulk insert using `execute_values()`  
-- Foreign key integrity validation  
-
----
-
-## 🛠️ Installation
-
-```bash
-git clone https://github.com/saeidmoradi1998/movie-analytics-data-warehouse.git
-cd movie-analytics-data-warehouse
-pip install -r requirements.txt
-```
+- Star Schema optimized for analytical workloads  
+- Proper handling of many-to-many relationships  
+- Clear separation of ETL layers  
+- Bulk inserts for performance  
+- Referential integrity with foreign keys  
+- Scalable project structure  
 
 ---
 
-## ▶️ Run ETL
+## 📈 Future Improvements
 
-```bash
-python etl/load.py
-```
-
----
-
-## 🎯 Key Concepts Demonstrated
-
-- Star Schema modeling  
-- Fact & Dimension design  
-- Many-to-many relationship handling  
-- Bulk insert optimization  
-- Analytical SQL queries  
-- Data validation & integrity checks  
+- Add indexing optimization  
+- Dockerized PostgreSQL setup  
+- CI/CD for ETL  
+- Automated data validation tests  
+- BI dashboard integration  
 
 ---
 
-## 📌 Current Scope
+## 🛠 Tech Stack
 
-The ETL process has been validated on a development subset of records.  
-The schema design supports scalable full-dataset loading.
-
----
-
-
-## 📈 Data Validation Checks
-
-After loading the data into PostgreSQL, several validation checks were performed:
-
-- Verified foreign key integrity between fact and dimension tables
-- Checked for orphan records in bridge and fact tables
-- Validated rating range (min/max)
-- Validated vote_count range
-- Compared dimension vs fact row counts
-- Verified multi-genre relationships in bridge table
-
-These checks ensure data integrity and correctness of the warehouse design.
+- Python  
+- Pandas  
+- PostgreSQL  
+- SQL  
+- psycopg2  
+- Git  
 
 ---
+
+## 👤 Author
+
+Saeid Moradi  
+MSc Digital Technologies – Data Engineering & Analytics  
+
+GitHub: https://github.com/saeidmoradi1998  
