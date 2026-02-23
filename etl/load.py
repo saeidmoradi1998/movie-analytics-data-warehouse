@@ -8,7 +8,7 @@ logger = setup_logger()
 
 from pathlib import Path
 from dotenv import load_dotenv
-from psycopg2.extras import execute_values
+
 
 
 
@@ -39,15 +39,12 @@ def get_connection():
         raise
 
 
-def load_dim_movie():
+def load_dim_movie(df):
     
     logger.info("Starting load for dim_movie...")
-    
-    # Read cleaned IMDB data
-    df = pd.read_csv(DATA_PATH)
 
     # Keep only columns needed for dim_movie
-    df = df[["imdb_id", "title", "release_year"]]
+    df = df[["imdb_id", "title", "release_year"]].copy()
 
     # Remove duplicate movies
     df = df.drop_duplicates(subset=["imdb_id"])
@@ -71,13 +68,12 @@ def load_dim_movie():
     # Prepare records for bulk insert
     records = []
 
-    for _, row in df.iterrows():
-        year = row["release_year"]
-        year = None if pd.isna(year) else int(year)
+    for row in df.itertuples(index=False):
+        year = None if pd.isna(row.release_year) else int(row.release_year)
 
         records.append((
-            row["imdb_id"],
-            row["title"],
+            row.imdb_id,
+            row.title,
             year
         ))
 
@@ -102,13 +98,11 @@ def load_dim_movie():
     logger.info("dim_movie load completed successfully.")
 
 
-def load_dim_genre():
+def load_dim_genre(df):
     
     logger.info("Starting load for dim_genre...")
     
-    df = pd.read_csv(DATA_PATH)
-
-    df = df[["genres"]]
+    df = df[["genres"]].copy()
 
     df = df.dropna()
     df = df[df["genres"] != "\\N"]
@@ -120,7 +114,7 @@ def load_dim_genre():
     cur = conn.cursor()
 
     # Prepare records for bulk insert
-    records = [(row["genres"],) for _, row in df.iterrows()]
+    records = [(row.genres,) for row in df.itertuples(index=False)]
 
     insert_query = """
         INSERT INTO dim_genre (genre_name)
@@ -139,12 +133,10 @@ def load_dim_genre():
 
     logger.info("dim_genre load completed successfully.")
 
-def load_dim_date():
+def load_dim_date(df):
     
     logger.info("Starting load for dim_date...")
     
-    df = pd.read_csv(DATA_PATH)
-
     years = pd.to_numeric(df["release_year"], errors="coerce")
     years = years.dropna().astype(int).unique()
     logger.info(f"Unique years found for dim_date: {len(years)}")
@@ -166,8 +158,8 @@ def load_dim_date():
         VALUES %s
         ON CONFLICT DO NOTHING
     """
-
-    execute_values(cur, insert_query, records)
+    if records:
+        execute_values(cur, insert_query, records)
 
     conn.commit()
     logger.info("dim_date committed to database.")
@@ -178,12 +170,9 @@ def load_dim_date():
 
 
 
-def load_bridge_movie_genre():
+def load_bridge_movie_genre(df):
     
     logger.info("Starting load for bridge_movie_genre...")
-    
-    df = pd.read_csv(DATA_PATH)
-
 
     df = df.head(5000)
 
@@ -207,16 +196,15 @@ def load_bridge_movie_genre():
 
     records = []
 
-    for _, row in df.iterrows():
-        movie_id = movie_map.get(row["imdb_id"])
-
+    for row in df.itertuples(index=False):
+        movie_id = movie_map.get(row.imdb_id)
         if not movie_id:
             continue
 
-        genres = row["genres"].split(",")
+        genres = row.genres.split(",")
 
         for g in genres:
-            g = g.strip()   
+            g = g.strip()
             genre_id = genre_map.get(g)
 
             if genre_id:
@@ -242,13 +230,11 @@ def load_bridge_movie_genre():
 
 
 
-def load_fact_movie_performance():
+def load_fact_movie_performance(df):
     
     logger.info("Starting load for fact_movie_performance...")
     
-    df = pd.read_csv(DATA_PATH)
-
-    df = df[["imdb_id", "release_year", "rating", "vote_count"]]
+    df = df[["imdb_id", "release_year", "rating", "vote_count"]].copy()
 
     df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
     df["vote_count"] = pd.to_numeric(df["vote_count"], errors="coerce")
@@ -271,19 +257,18 @@ def load_fact_movie_performance():
 
     records = []
 
-    for _, row in df.iterrows():
-        movie_id = movie_map.get(row["imdb_id"])
+    for row in df.itertuples(index=False):
+        movie_id = movie_map.get(row.imdb_id)
         if not movie_id:
             continue
 
-        year = int(row["release_year"])
-        date_id = year
+        date_id = int(row.release_year)
 
         records.append((
             movie_id,
             date_id,
-            float(row["rating"]),
-            int(row["vote_count"])
+            float(row.rating),
+            int(row.vote_count)
         ))
     
     logger.info(f"Total fact records prepared: {len(records)}")
@@ -311,9 +296,12 @@ def load_fact_movie_performance():
 
 if __name__ == "__main__":
     logger.info("Starting full ETL load process...")
-    load_dim_movie()
-    load_dim_genre()
-    load_dim_date()
-    load_bridge_movie_genre()
-    load_fact_movie_performance()
+    
+    df = pd.read_csv(DATA_PATH)
+
+    load_dim_movie(df)
+    load_dim_genre(df)
+    load_dim_date(df)
+    load_bridge_movie_genre(df)
+    load_fact_movie_performance(df)
     logger.info("Full ETL load process completed successfully.")
