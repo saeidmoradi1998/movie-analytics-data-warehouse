@@ -1,13 +1,13 @@
 -- 1. Dimension tables
 
-CREATE TABLE dim_movie (
+CREATE TABLE IF NOT EXISTS dim_movie (
     movie_id SERIAL PRIMARY KEY,
-    imdb_id VARCHAR(20),
+    imdb_id VARCHAR(20) UNIQUE NOT NULL,
     title TEXT NOT NULL,
     release_year INT
 );
 
-CREATE TABLE dim_date (
+CREATE TABLE IF NOT EXISTS dim_date (
     date_id INT PRIMARY KEY,
     year INT,
     month INT,
@@ -15,25 +15,31 @@ CREATE TABLE dim_date (
     decade INT
 );
 
-CREATE TABLE dim_genre (
+CREATE TABLE IF NOT EXISTS dim_genre (
     genre_id SERIAL PRIMARY KEY,
     genre_name TEXT UNIQUE
 );
 
-CREATE TABLE dim_country (
+CREATE TABLE IF NOT EXISTS dim_country (
     country_id SERIAL PRIMARY KEY,
     country_name TEXT UNIQUE
 );
 
-CREATE TABLE dim_language (
+CREATE TABLE IF NOT EXISTS dim_language (
     language_id SERIAL PRIMARY KEY,
     language_name TEXT UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS bridge_movie_genre (
+    movie_id INT REFERENCES dim_movie(movie_id),
+    genre_id INT REFERENCES dim_genre(genre_id),
+    PRIMARY KEY (movie_id, genre_id)
 );
 
 
 -- 2. Fact table
 
-CREATE TABLE fact_movie_performance (
+CREATE TABLE IF NOT EXISTS fact_movie_performance (
     fact_id SERIAL PRIMARY KEY,
 
     movie_id INT REFERENCES dim_movie(movie_id),
@@ -47,5 +53,7 @@ CREATE TABLE fact_movie_performance (
     popularity NUMERIC,
     revenue BIGINT,
     budget BIGINT,
-    runtime INT
+    runtime INT,
+
+    UNIQUE (movie_id, date_id)
 );

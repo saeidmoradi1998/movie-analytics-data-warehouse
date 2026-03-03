@@ -58,8 +58,9 @@ erDiagram
 
     dim_movie {
         int movie_id
+        string imdb_id
         string title
-        int runtime
+        int release_year
     }
 
     dim_date {
@@ -94,20 +95,28 @@ movie-analytics-data-warehouse/
 │
 ├── data/
 │   ├── raw/
+│   │   └── imdb/
 │   └── processed/
 │
 ├── etl/
 │   ├── extract.py
 │   ├── transform.py
-│   └── load.py
+│   ├── load.py
+│   └── logger_config.py
 │
 ├── sql/
 │   ├── schema.sql
 │   └── example_queries.sql
 │
+├── tests/
+│   ├── test_extract.py
+│   ├── test_transform.py
+│   └── test_load.py
+│
+├── logs/
 ├── assets/
 ├── notebooks/
-│
+├── .env.example
 ├── requirements.txt
 └── README.md
 ```
@@ -123,23 +132,46 @@ git clone https://github.com/saeidmoradi1998/movie-analytics-data-warehouse.git
 cd movie-analytics-data-warehouse
 ```
 
-### 2️⃣ Install Dependencies
+### 2️⃣ Create Virtual Environment
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 3️⃣ Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3️⃣ Setup PostgreSQL
+### 4️⃣ Configure Environment Variables
+
+```bash
+copy .env.example .env
+```
+
+Then open `.env` and fill in your PostgreSQL credentials.
+
+### 5️⃣ Setup PostgreSQL Database
 
 ```bash
 createdb movie_dw
 psql movie_dw -f sql/schema.sql
 ```
 
-### 4️⃣ Run ETL
+### 6️⃣ Run ETL Pipeline
 
 ```bash
+python etl/extract.py
+python etl/transform.py
 python etl/load.py
+```
+
+### 7️⃣ Run Tests
+
+```bash
+pytest
 ```
 
 ---
@@ -199,9 +231,9 @@ ORDER BY avg_rating DESC;
 
 - Add indexing optimization  
 - Dockerized PostgreSQL setup  
-- CI/CD for ETL  
-- Automated data validation tests  
-- BI dashboard integration  
+- CI/CD for ETL pipeline  
+- TMDB data source integration  
+- BI dashboard integration (e.g. Metabase / Power BI)  
 
 ---
 
@@ -212,6 +244,7 @@ ORDER BY avg_rating DESC;
 - PostgreSQL  
 - SQL  
 - psycopg2  
+- pytest  
 - Git  
 
 ---

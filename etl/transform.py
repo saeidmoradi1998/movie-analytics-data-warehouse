@@ -1,12 +1,11 @@
 import pandas as pd
 from pathlib import Path
-import pandas as pd
 from logger_config import setup_logger
 
 logger = setup_logger()
 
-RAW_PATH = Path("data/raw/imdb")
-PROCESSED_PATH = Path("data/processed")
+RAW_PATH = Path(__file__).parent.parent / "data" / "raw" / "imdb"
+PROCESSED_PATH = Path(__file__).parent.parent / "data" / "processed"
 
 PROCESSED_PATH.mkdir(exist_ok=True)
 
@@ -25,6 +24,7 @@ def transform_imdb():
 
     initial_rows = len(df)
     df = df.dropna(subset=["genres"])
+    df = df[df["genres"] != "\\N"]
     logger.info(f"Dropped {initial_rows - len(df)} rows due to missing genres")
 
     df["genres"] = df["genres"].str.split(",")

@@ -1,4 +1,47 @@
-data/
+# -------------------------
+# Data (large files)
+# -------------------------
+data/raw/imdb/*.tsv
+data/raw/imdb/*.csv
+data/raw/tmdb/*
+data/processed/*
+
+# -------------------------
+# Python
+# -------------------------
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# -------------------------
+# Virtual Environment
+# -------------------------
+venv/
+.venv/
 .env
-logs/
+
+# -------------------------
+# Logs
+# -------------------------
+logs/*
+
+# -------------------------
+# Testing
+# -------------------------
+.pytest_cache/
+.coverage
+
+# -------------------------
+# Jupyter
+# -------------------------
+.ipynb_checkpoints/
+
+# -------------------------
+# OS files
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# Keep folder structure
+!**/.gitkeep

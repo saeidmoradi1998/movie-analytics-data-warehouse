@@ -1,19 +1,15 @@
 import os
+from pathlib import Path
 import psycopg2
 import pandas as pd
+from dotenv import load_dotenv
 from logger_config import setup_logger
 from psycopg2.extras import execute_values
 
-logger = setup_logger()
-
-from pathlib import Path
-from dotenv import load_dotenv
-
-
-
-
 # Load environment variables
 load_dotenv()
+
+logger = setup_logger()
 
 # Database configuration
 DB_CONFIG = {
@@ -25,7 +21,7 @@ DB_CONFIG = {
 }
 
 # Path to processed data
-DATA_PATH = Path("data/processed/imdb_cleaned.csv")
+DATA_PATH = Path(__file__).parent.parent / "data" / "processed" / "imdb_cleaned.csv"
 
 
 def get_connection():
@@ -50,9 +46,6 @@ def load_dim_movie(df):
     df = df.drop_duplicates(subset=["imdb_id"])
     logger.info(f"Unique movies to insert: {len(df)}")
 
-    # ⏩ LIMIT rows for faster loading (TEMPORARY)
-    df = df.head(5000)
-
     # Convert release_year to numeric (invalid values -> NaN)
     df["release_year"] = pd.to_numeric(df["release_year"], errors="coerce")
 
@@ -63,37 +56,38 @@ def load_dim_movie(df):
     ] = pd.NA
 
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # Prepare records for bulk insert
-    records = []
+        # Prepare records for bulk insert
+        records = []
 
-    for row in df.itertuples(index=False):
-        year = None if pd.isna(row.release_year) else int(row.release_year)
+        for row in df.itertuples(index=False):
+            year = None if pd.isna(row.release_year) else int(row.release_year)
 
-        records.append((
-            row.imdb_id,
-            row.title,
-            year
-        ))
+            records.append((
+                row.imdb_id,
+                row.title,
+                year
+            ))
 
-    insert_query = """
-        INSERT INTO dim_movie (imdb_id, title, release_year)
-        VALUES %s
-        ON CONFLICT (imdb_id)
-        DO UPDATE SET
-            title = EXCLUDED.title,
-            release_year = EXCLUDED.release_year
-    """
+        insert_query = """
+            INSERT INTO dim_movie (imdb_id, title, release_year)
+            VALUES %s
+            ON CONFLICT (imdb_id)
+            DO UPDATE SET
+                title = EXCLUDED.title,
+                release_year = EXCLUDED.release_year
+        """
 
-    if records:
-        execute_values(cur, insert_query, records)
+        if records:
+            execute_values(cur, insert_query, records)
 
-    conn.commit()
-    logger.info("dim_movie committed to database.")
-    
-    cur.close()
-    conn.close()
+        conn.commit()
+        logger.info("dim_movie committed to database.")
+        cur.close()
+    finally:
+        conn.close()
 
     logger.info("dim_movie load completed successfully.")
 
@@ -111,25 +105,26 @@ def load_dim_genre(df):
     logger.info(f"Unique genres to insert: {len(df)}")
 
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # Prepare records for bulk insert
-    records = [(row.genres,) for row in df.itertuples(index=False)]
+        # Prepare records for bulk insert
+        records = [(row.genres,) for row in df.itertuples(index=False)]
 
-    insert_query = """
-        INSERT INTO dim_genre (genre_name)
-        VALUES %s
-        ON CONFLICT DO NOTHING
-    """
+        insert_query = """
+            INSERT INTO dim_genre (genre_name)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+        """
 
-    if records:
-        execute_values(cur, insert_query, records)
+        if records:
+            execute_values(cur, insert_query, records)
 
-    conn.commit()
-    logger.info("dim_genre committed to database.")
-
-    cur.close()
-    conn.close()
+        conn.commit()
+        logger.info("dim_genre committed to database.")
+        cur.close()
+    finally:
+        conn.close()
 
     logger.info("dim_genre load completed successfully.")
 
@@ -142,29 +137,31 @@ def load_dim_date(df):
     logger.info(f"Unique years found for dim_date: {len(years)}")
 
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    records = []
+        records = []
 
-    for y in years:
-        year = int(y)
-        date_id = year          
-        decade = (year // 10) * 10
+        for y in years:
+            year = int(y)
+            date_id = year
+            decade = (year // 10) * 10
 
-        records.append((date_id, year, 1, 1, decade))
+            records.append((date_id, year, 1, 1, decade))
 
-    insert_query = """
-        INSERT INTO dim_date (date_id, year, month, day, decade)
-        VALUES %s
-        ON CONFLICT DO NOTHING
-    """
-    if records:
-        execute_values(cur, insert_query, records)
+        insert_query = """
+            INSERT INTO dim_date (date_id, year, month, day, decade)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+        """
+        if records:
+            execute_values(cur, insert_query, records)
 
-    conn.commit()
-    logger.info("dim_date committed to database.")
-    cur.close()
-    conn.close()
+        conn.commit()
+        logger.info("dim_date committed to database.")
+        cur.close()
+    finally:
+        conn.close()
 
     logger.info("dim_date load completed successfully")
 
@@ -174,57 +171,51 @@ def load_bridge_movie_genre(df):
     
     logger.info("Starting load for bridge_movie_genre...")
 
-    df = df.head(5000)
-
     df = df[["imdb_id", "genres"]]
     df = df.dropna()
     logger.info(f"Rows prepared for bridge table: {len(df)}")
 
-
     df = df[df["genres"] != "\\N"]
 
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    # 🔥 Load movie_ids into dictionary
-    cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
-    movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
+        # Load movie_ids into dictionary
+        cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
+        movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
 
-    # 🔥 Load genre_ids into dictionary
-    cur.execute("SELECT genre_id, genre_name FROM dim_genre")
-    genre_map = {genre_name: genre_id for genre_id, genre_name in cur.fetchall()}
+        # Load genre_ids into dictionary
+        cur.execute("SELECT genre_id, genre_name FROM dim_genre")
+        genre_map = {genre_name: genre_id for genre_id, genre_name in cur.fetchall()}
 
-    records = []
+        records = []
 
-    for row in df.itertuples(index=False):
-        movie_id = movie_map.get(row.imdb_id)
-        if not movie_id:
-            continue
+        for row in df.itertuples(index=False):
+            movie_id = movie_map.get(row.imdb_id)
+            if not movie_id:
+                continue
 
-        genres = row.genres.split(",")
-
-        for g in genres:
-            g = g.strip()
-            genre_id = genre_map.get(g)
-
+            genre_id = genre_map.get(row.genres.strip())
             if genre_id:
                 records.append((movie_id, genre_id))
 
-    logger.info(f"Total bridge records prepared: {len(records)}")
+        logger.info(f"Total bridge records prepared: {len(records)}")
 
-    insert_query = """
-        INSERT INTO bridge_movie_genre (movie_id, genre_id)
-        VALUES %s
-        ON CONFLICT DO NOTHING
-    """
+        insert_query = """
+            INSERT INTO bridge_movie_genre (movie_id, genre_id)
+            VALUES %s
+            ON CONFLICT DO NOTHING
+        """
 
-    if records:   
-        execute_values(cur, insert_query, records)
+        if records:
+            execute_values(cur, insert_query, records)
 
-    conn.commit()
-    logger.info("bridge_movie_genre committed to database.")
-    cur.close()
-    conn.close()
+        conn.commit()
+        logger.info("bridge_movie_genre committed to database.")
+        cur.close()
+    finally:
+        conn.close()
 
     logger.info("bridge_movie_genre load completed successfully")
 
@@ -245,50 +236,48 @@ def load_fact_movie_performance(df):
     
     logger.info(f"Fact rows after cleaning: {len(df)}")
 
-
-    df = df.head(3000)
-
     conn = get_connection()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
+        cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
+        movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
 
-    cur.execute("SELECT movie_id, imdb_id FROM dim_movie")
-    movie_map = {imdb_id: movie_id for movie_id, imdb_id in cur.fetchall()}
+        records = []
 
-    records = []
+        for row in df.itertuples(index=False):
+            movie_id = movie_map.get(row.imdb_id)
+            if not movie_id:
+                continue
 
-    for row in df.itertuples(index=False):
-        movie_id = movie_map.get(row.imdb_id)
-        if not movie_id:
-            continue
+            date_id = int(row.release_year)
 
-        date_id = int(row.release_year)
+            records.append((
+                movie_id,
+                date_id,
+                float(row.rating),
+                int(row.vote_count)
+            ))
 
-        records.append((
-            movie_id,
-            date_id,
-            float(row.rating),
-            int(row.vote_count)
-        ))
-    
-    logger.info(f"Total fact records prepared: {len(records)}")
+        logger.info(f"Total fact records prepared: {len(records)}")
 
-    insert_query = """
-        INSERT INTO fact_movie_performance
-        (movie_id, date_id, rating, vote_count)
-        VALUES %s
-        ON CONFLICT (movie_id, date_id)
-        DO UPDATE SET
-            rating = EXCLUDED.rating,
-            vote_count = EXCLUDED.vote_count
-    """
-    if records:
-        execute_values(cur, insert_query, records)
+        insert_query = """
+            INSERT INTO fact_movie_performance
+            (movie_id, date_id, rating, vote_count)
+            VALUES %s
+            ON CONFLICT (movie_id, date_id)
+            DO UPDATE SET
+                rating = EXCLUDED.rating,
+                vote_count = EXCLUDED.vote_count
+        """
+        if records:
+            execute_values(cur, insert_query, records)
 
-    conn.commit()
-    logger.info("fact_movie_performance committed to database.")
-    cur.close()
-    conn.close()
+        conn.commit()
+        logger.info("fact_movie_performance committed to database.")
+        cur.close()
+    finally:
+        conn.close()
 
     logger.info("fact_movie_performance load completed successfully")
 

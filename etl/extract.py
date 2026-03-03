@@ -5,7 +5,7 @@ from logger_config import setup_logger
 logger = setup_logger()
 
 
-RAW_IMDB_PATH = Path("data/raw/imdb")
+RAW_IMDB_PATH = Path(__file__).parent.parent / "data" / "raw" / "imdb"
 
 
 def extract_imdb_basics():
